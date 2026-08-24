@@ -343,6 +343,61 @@ section[data-testid="stSidebar"] {
 }
 
 #MainMenu, footer {visibility: hidden;}
+
+/* ---------- Contrast fixes for native Streamlit widgets ---------- */
+/* Streamlit's own dark theme leaks light-grey text into these widgets
+   on our light background — force readable ink/soft-ink everywhere. */
+
+section[data-testid="stSidebar"] label,
+section[data-testid="stSidebar"] p,
+section[data-testid="stSidebar"] span {
+    color: var(--ink) !important;
+}
+
+[data-testid="stSliderTickBarMin"],
+[data-testid="stSliderTickBarMax"] {
+    color: var(--ink-soft) !important;
+}
+
+[data-testid="stFileUploaderDropzoneInstructions"] div,
+[data-testid="stFileUploaderDropzoneInstructions"] span,
+[data-testid="stFileUploaderDropzoneInstructions"] small {
+    color: var(--ink-soft) !important;
+}
+
+[data-testid="stFileUploaderFile"],
+[data-testid="stFileUploaderFile"] span,
+[data-testid="stFileUploaderFileName"] {
+    color: var(--ink) !important;
+}
+
+/* Alert boxes (st.warning / st.info / st.error / st.success) */
+[data-testid="stAlert"] p,
+[data-testid="stAlert"] span,
+[data-testid="stAlertContentWarning"] p,
+[data-testid="stAlertContentInfo"] p,
+[data-testid="stAlertContentError"] p,
+[data-testid="stAlertContentSuccess"] p {
+    color: var(--ink) !important;
+    font-weight: 500;
+}
+
+/* Tabs: inactive labels were washing out against the light card */
+.stTabs [data-baseweb="tab"] p {
+    color: var(--ink-soft) !important;
+}
+.stTabs [aria-selected="true"] p {
+    color: var(--primary) !important;
+    font-weight: 600;
+}
+
+/* st.json viewer in the "Raw data" tab */
+[data-testid="stJson"] {
+    background: var(--surface) !important;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 0.5rem;
+}
 </style>
 """
 
@@ -499,9 +554,16 @@ if uploaded_file is not None:
             go.Indicator(
                 mode="gauge+number",
                 value=confidence_pct,
-                number={"suffix": "%", "font": {"size": 40, "family": "IBM Plex Mono"}},
+                number={
+                    "suffix": "%",
+                    "font": {"size": 40, "family": "IBM Plex Mono", "color": "#221933"},
+                },
                 gauge={
-                    "axis": {"range": [0, 100], "tickcolor": "#6B6280"},
+                    "axis": {
+                        "range": [0, 100],
+                        "tickcolor": "#6B6280",
+                        "tickfont": {"color": "#6B6280", "size": 11},
+                    },
                     "bar": {"color": gauge_colors[tier]},
                     "bgcolor": "white",
                     "borderwidth": 0,
@@ -514,10 +576,12 @@ if uploaded_file is not None:
             )
         )
         fig.update_layout(
+            template="plotly_white",
             height=220,
             margin=dict(l=20, r=20, t=10, b=10),
             paper_bgcolor="rgba(0,0,0,0)",
-            font={"family": "Inter"},
+            plot_bgcolor="rgba(0,0,0,0)",
+            font={"family": "Inter", "color": "#221933"},
         )
 
         render_html(
@@ -579,15 +643,23 @@ if uploaded_file is not None:
                 marker_color=bar_colors,
                 text=[f"{v:.2f}%" for v in values],
                 textposition="outside",
+                textfont={"color": "#221933", "family": "IBM Plex Mono"},
                 hovertemplate="%{y}: %{x:.2f}%<extra></extra>",
             )
         )
         bar_fig.update_layout(
+            template="plotly_white",
             height=280,
             margin=dict(l=10, r=10, t=10, b=10),
             paper_bgcolor="rgba(0,0,0,0)",
             plot_bgcolor="rgba(0,0,0,0)",
-            xaxis=dict(range=[0, max(values) * 1.2], showgrid=False, ticksuffix="%"),
+            xaxis=dict(
+                range=[0, max(values) * 1.2],
+                showgrid=False,
+                ticksuffix="%",
+                tickfont={"color": "#6B6280"},
+            ),
+            yaxis=dict(tickfont={"color": "#221933"}),
             font={"family": "Inter", "color": "#221933"},
         )
         st.plotly_chart(bar_fig, use_container_width=True, config={"displayModeBar": False})
