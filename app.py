@@ -1,1062 +1,596 @@
+import textwrap
+
+import plotly.graph_objects as go
 import streamlit as st
 from PIL import Image
-import pandas as pd
 
 from src.preprocessing import preprocess_image
 from src.predictor import load_model, predict
 
 
-# ============================================================
-# PAGE CONFIG
-# ============================================================
+# --------------------------------------------------
+# PAGE CONFIGURATION
+# --------------------------------------------------
 
 st.set_page_config(
-    page_title="TextureAI | Surface Classification",
-    page_icon="🔬",
+    page_title="Surface & Texture Analysis",
+    page_icon="🧩",
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
 
-# ============================================================
-# CUSTOM CSS
-# ============================================================
+def render_html(html: str) -> None:
+    """st.markdown wrapper that dedents multi-line HTML first.
+
+    Streamlit's markdown renderer treats 4+ leading spaces as a code
+    block, so an indented triple-quoted HTML string gets shown as
+    literal text instead of being rendered. Dedenting avoids that.
+    """
+    st.markdown(textwrap.dedent(html), unsafe_allow_html=True)
+
+
+# --------------------------------------------------
+# DESIGN SYSTEM (CSS)
+# --------------------------------------------------
+# Concept: a materials lab, but the vivid version — swatch cards under
+# gallery lighting. Violet-ink as the structural colour, gold for the
+# hero reading, coral/mint as a live confidence signal (low -> high).
 
 CUSTOM_CSS = """
 <style>
-
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
 
 :root {
-    --background: #f5f7fb;
-    --card: #ffffff;
-    --primary: #4f46e5;
-    --primary-dark: #3730a3;
-    --secondary: #7c3aed;
-    --text: #111827;
-    --muted: #6b7280;
-    --border: #e5e7eb;
-    --success: #059669;
+    --bg: #F4F1FA;
+    --surface: #FFFFFF;
+    --ink: #221933;
+    --ink-soft: #6B6280;
+    --primary: #5B4B9E;
+    --primary-dark: #3F3270;
+    --gold: #E3A857;
+    --coral: #E4634F;
+    --mint: #3FA796;
+    --line: #E1DCEF;
 }
 
 html, body, [class*="css"] {
     font-family: 'Inter', sans-serif;
+    color: var(--ink);
 }
 
 .stApp {
     background:
-        radial-gradient(
-            circle at 10% 10%,
-            rgba(99, 102, 241, 0.08),
-            transparent 30%
-        ),
-        radial-gradient(
-            circle at 90% 20%,
-            rgba(124, 58, 237, 0.07),
-            transparent 30%
-        ),
-        var(--background);
+        radial-gradient(circle at 15% 0%, #EFE9FB 0%, transparent 45%),
+        radial-gradient(circle at 100% 20%, #FBF1E3 0%, transparent 40%),
+        var(--bg);
 }
 
+@keyframes fadeInUp {
+    from { opacity: 0; transform: translateY(10px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
 
-/* ============================================================
-   HEADER
-   ============================================================ */
+/* ---------- Hero header ---------- */
 
 .hero {
-    padding: 2rem 2.2rem;
-    border-radius: 24px;
-    margin-bottom: 1.8rem;
-
-    background:
-        linear-gradient(
-            135deg,
-            #312e81 0%,
-            #4f46e5 50%,
-            #7c3aed 100%
-        );
-
-    color: white;
-
-    box-shadow:
-        0 15px 40px rgba(79, 70, 229, 0.22);
-}
-
-.hero-badge {
-    display: inline-block;
-
-    padding: 0.35rem 0.8rem;
-
-    border-radius: 999px;
-
-    background: rgba(255,255,255,0.15);
-
-    border: 1px solid rgba(255,255,255,0.25);
-
-    font-size: 0.75rem;
-
-    font-weight: 600;
-
-    letter-spacing: 0.08em;
-
-    text-transform: uppercase;
-
-    margin-bottom: 0.8rem;
-}
-
-.hero-title {
-    font-size: 2.6rem;
-
-    font-weight: 800;
-
-    margin: 0;
-
-    line-height: 1.1;
-}
-
-.hero-subtitle {
-    margin-top: 0.7rem;
-
-    font-size: 1rem;
-
-    color: rgba(255,255,255,0.82);
-
-    max-width: 750px;
-}
-
-
-/* ============================================================
-   SECTION HEADERS
-   ============================================================ */
-
-.section-title {
-    font-size: 1.1rem;
-
-    font-weight: 700;
-
-    color: var(--text);
-
-    margin-top: 1.5rem;
-
-    margin-bottom: 0.8rem;
-}
-
-.section-caption {
-    font-size: 0.85rem;
-
-    color: var(--muted);
-
-    margin-bottom: 1rem;
-}
-
-
-/* ============================================================
-   STAT CARDS
-   ============================================================ */
-
-.stat-card {
-    background: var(--card);
-
-    border: 1px solid var(--border);
-
-    border-radius: 16px;
-
-    padding: 1rem 1.2rem;
-
-    box-shadow:
-        0 5px 18px rgba(17, 24, 39, 0.05);
-}
-
-.stat-label {
-    font-size: 0.72rem;
-
-    text-transform: uppercase;
-
-    letter-spacing: 0.08em;
-
-    color: var(--muted);
-
-    font-weight: 600;
-}
-
-.stat-value {
-    font-size: 1.25rem;
-
-    font-weight: 700;
-
-    color: var(--text);
-
-    margin-top: 0.25rem;
-}
-
-
-/* ============================================================
-   UPLOAD AREA
-   ============================================================ */
-
-[data-testid="stFileUploaderDropzone"] {
-
-    background: rgba(255,255,255,0.85);
-
-    border: 2px dashed #a5b4fc;
-
+    background: linear-gradient(120deg, var(--primary) 0%, var(--primary-dark) 100%);
     border-radius: 18px;
-
-    padding: 1rem;
-
-    transition: all 0.2s ease;
-}
-
-[data-testid="stFileUploaderDropzone"]:hover {
-
-    border-color: var(--primary);
-
-    background: #f8f8ff;
-}
-
-
-/* ============================================================
-   CARDS
-   ============================================================ */
-
-.card {
-
-    background: var(--card);
-
-    border: 1px solid var(--border);
-
-    border-radius: 20px;
-
-    padding: 1.5rem;
-
-    box-shadow:
-        0 8px 25px rgba(17, 24, 39, 0.06);
-
-}
-
-
-/* ============================================================
-   PREDICTION CARD
-   ============================================================ */
-
-.prediction-card {
-
-    background:
-        linear-gradient(
-            145deg,
-            #eef2ff,
-            #ffffff
-        );
-
-    border: 1px solid #c7d2fe;
-
-    border-radius: 20px;
-
-    padding: 1.7rem;
-
-    box-shadow:
-        0 10px 30px rgba(79, 70, 229, 0.10);
-}
-
-.prediction-label {
-
-    font-size: 0.72rem;
-
-    text-transform: uppercase;
-
-    letter-spacing: 0.12em;
-
-    color: var(--primary);
-
-    font-weight: 700;
-}
-
-.prediction-class {
-
-    font-size: 2.1rem;
-
-    font-weight: 800;
-
-    color: var(--primary-dark);
-
-    margin-top: 0.4rem;
-
-    text-transform: capitalize;
-}
-
-.confidence-number {
-
-    font-size: 2.8rem;
-
-    font-weight: 800;
-
-    color: var(--text);
-
-    margin-top: 1rem;
-}
-
-.confidence-label {
-
-    color: var(--muted);
-
-    font-size: 0.8rem;
-
-    text-transform: uppercase;
-
-    letter-spacing: 0.08em;
-}
-
-
-/* ============================================================
-   CONFIDENCE BAR
-   ============================================================ */
-
-.confidence-track {
-
-    width: 100%;
-
-    height: 10px;
-
-    background: #e5e7eb;
-
-    border-radius: 999px;
-
+    padding: 2.2rem 2.4rem;
+    margin-bottom: 1.8rem;
+    color: #FFFFFF;
+    position: relative;
     overflow: hidden;
-
-    margin-top: 0.8rem;
+    animation: fadeInUp 0.5s ease-out;
 }
 
-.confidence-fill {
-
-    height: 100%;
-
-    border-radius: 999px;
-
-    background:
-        linear-gradient(
-            90deg,
-            #4f46e5,
-            #7c3aed
-        );
-}
-
-
-/* ============================================================
-   TOP PREDICTION ROW
-   ============================================================ */
-
-.prediction-row {
-
-    display: flex;
-
-    align-items: center;
-
-    gap: 0.8rem;
-
-    padding: 0.7rem 0;
-
-    border-bottom: 1px solid var(--border);
-}
-
-.prediction-rank {
-
-    width: 28px;
-
-    height: 28px;
-
+.hero::after {
+    content: "";
+    position: absolute;
+    top: -40%;
+    right: -10%;
+    width: 320px;
+    height: 320px;
+    background: radial-gradient(circle, rgba(227,168,87,0.35) 0%, transparent 70%);
     border-radius: 50%;
-
-    display: flex;
-
-    align-items: center;
-
-    justify-content: center;
-
-    background: #eef2ff;
-
-    color: var(--primary);
-
-    font-size: 0.75rem;
-
-    font-weight: 700;
 }
 
-.prediction-name {
-
-    width: 130px;
-
-    font-size: 0.9rem;
-
-    font-weight: 600;
-
-    color: var(--text);
-
-    text-transform: capitalize;
-}
-
-.prediction-bar {
-
-    flex: 1;
-
-    height: 8px;
-
-    background: #eef0f4;
-
-    border-radius: 999px;
-
-    overflow: hidden;
-}
-
-.prediction-fill {
-
-    height: 100%;
-
-    border-radius: 999px;
-
-    background:
-        linear-gradient(
-            90deg,
-            #6366f1,
-            #8b5cf6
-        );
-}
-
-.prediction-percent {
-
-    width: 65px;
-
-    text-align: right;
-
-    font-size: 0.8rem;
-
-    font-weight: 600;
-
-    color: var(--muted);
-}
-
-
-/* ============================================================
-   SIDEBAR
-   ============================================================ */
-
-section[data-testid="stSidebar"] {
-
-    background: #111827;
-}
-
-section[data-testid="stSidebar"] * {
-
-    color: #f9fafb;
-}
-
-.sidebar-title {
-
-    font-size: 1.3rem;
-
-    font-weight: 800;
-
-    margin-bottom: 1.2rem;
-}
-
-.sidebar-item {
-
-    padding: 0.8rem;
-
-    border-radius: 10px;
-
-    background: rgba(255,255,255,0.06);
-
+.hero-eyebrow {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--gold);
     margin-bottom: 0.5rem;
 }
 
-.sidebar-label {
+.hero-title {
+    font-family: 'Fraunces', serif;
+    font-weight: 700;
+    font-size: 2.5rem;
+    line-height: 1.1;
+    margin: 0 0 0.5rem 0;
+}
 
-    font-size: 0.7rem;
+.hero-subtitle {
+    font-size: 0.98rem;
+    color: #E4DEF7;
+    max-width: 40rem;
+}
 
-    color: #9ca3af !important;
+/* ---------- Section labels ---------- */
 
+.section-label {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.14em;
     text-transform: uppercase;
-
-    letter-spacing: 0.08em;
+    color: var(--primary);
+    border-bottom: 2px solid var(--line);
+    padding-bottom: 0.4rem;
+    margin: 0.4rem 0 1rem 0;
 }
 
-.sidebar-value {
+/* ---------- Sidebar ---------- */
 
-    font-size: 0.9rem;
+section[data-testid="stSidebar"] {
+    background: var(--surface);
+    border-right: 1px solid var(--line);
+}
 
+.sidebar-eyebrow {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--gold);
+}
+
+.sidebar-title {
+    font-family: 'Fraunces', serif;
     font-weight: 600;
+    font-size: 1.35rem;
+    color: var(--ink);
+    margin: 0.2rem 0 1rem 0;
 }
 
+.spec-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.55rem 0;
+    border-bottom: 1px dashed var(--line);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.82rem;
+}
 
-/* ============================================================
-   BUTTON
-   ============================================================ */
+.spec-row .k { color: var(--ink-soft); }
+.spec-row .v { color: var(--primary); font-weight: 600; text-align: right; }
+
+/* ---------- Upload / drop zone ---------- */
+
+[data-testid="stFileUploaderDropzone"] {
+    background: var(--surface);
+    border: 1.5px dashed var(--primary);
+    border-radius: 10px;
+}
+
+/* ---------- Cards ---------- */
+
+.card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 1.6rem 1.8rem;
+    box-shadow: 0 1px 2px rgba(34, 25, 51, 0.04);
+    transition: box-shadow 0.2s ease, transform 0.2s ease;
+    animation: fadeInUp 0.45s ease-out;
+}
+
+.card:hover {
+    box-shadow: 0 12px 28px rgba(91, 75, 158, 0.14);
+    transform: translateY(-2px);
+}
+
+.result-label {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    margin-bottom: 0.5rem;
+}
+
+.result-class {
+    font-family: 'Fraunces', serif;
+    font-weight: 700;
+    font-size: 2rem;
+    color: var(--primary-dark);
+    margin: 0 0 0.9rem 0;
+    text-transform: capitalize;
+}
+
+/* ---------- Confidence badge ---------- */
+
+.badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.78rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    padding: 0.32rem 0.75rem;
+    border-radius: 999px;
+    margin-bottom: 0.3rem;
+}
+
+.badge-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+}
+
+.badge.high { background: rgba(63, 167, 150, 0.12); color: var(--mint); }
+.badge.high .badge-dot { background: var(--mint); }
+
+.badge.medium { background: rgba(227, 168, 87, 0.16); color: #B67A2C; }
+.badge.medium .badge-dot { background: var(--gold); }
+
+.badge.low { background: rgba(228, 99, 79, 0.12); color: var(--coral); }
+.badge.low .badge-dot { background: var(--coral); }
+
+/* ---------- Ranked readout rows (top-5) ---------- */
+
+.rank-row {
+    display: flex;
+    align-items: center;
+    gap: 0.9rem;
+    padding: 0.6rem 0;
+    animation: fadeInUp 0.4s ease-out;
+}
+
+.rank-badge {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #FFFFFF;
+    background: var(--primary);
+    width: 1.6rem;
+    height: 1.6rem;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.rank-row.top .rank-badge { background: var(--gold); color: var(--ink); }
+
+.rank-name {
+    font-family: 'Inter', sans-serif;
+    font-weight: 500;
+    font-size: 0.92rem;
+    width: 11rem;
+    flex-shrink: 0;
+    text-transform: capitalize;
+    color: var(--ink);
+}
+
+.rank-track {
+    flex-grow: 1;
+    height: 10px;
+    background: var(--bg);
+    border-radius: 5px;
+    overflow: hidden;
+    border: 1px solid var(--line);
+}
+
+.rank-fill {
+    height: 100%;
+    border-radius: 5px 0 0 5px;
+    background: linear-gradient(90deg, var(--primary) 0%, #8776CE 100%);
+    transition: width 0.6s ease-out;
+}
+
+.rank-row.top .rank-fill {
+    background: linear-gradient(90deg, var(--gold) 0%, #F0C687 100%);
+}
+
+.rank-pct {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.82rem;
+    color: var(--ink-soft);
+    width: 3.6rem;
+    text-align: right;
+    flex-shrink: 0;
+}
+
+/* ---------- Tabs ---------- */
+
+.stTabs [data-baseweb="tab-list"] { gap: 4px; }
+.stTabs [data-baseweb="tab"] {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.82rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    border-radius: 8px 8px 0 0;
+}
+.stTabs [aria-selected="true"] {
+    background: var(--surface);
+    color: var(--primary) !important;
+}
+
+/* ---------- Misc ---------- */
+
+.footnote {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.72rem;
+    color: var(--ink-soft);
+    letter-spacing: 0.04em;
+}
 
 .stButton > button {
-
-    border-radius: 10px;
-
-    border: none;
-
-    font-weight: 600;
-
     background: var(--primary);
-
-    color: white;
-
-    padding: 0.6rem 1.2rem;
+    color: #FFFFFF;
+    border: none;
+    border-radius: 8px;
+    font-weight: 600;
+    transition: background 0.2s ease;
 }
-
 .stButton > button:hover {
-
     background: var(--primary-dark);
-
-    color: white;
+    color: #FFFFFF;
 }
 
-
-/* ============================================================
-   HIDE STREAMLIT DEFAULT ELEMENTS
-   ============================================================ */
-
-#MainMenu {
-    visibility: hidden;
-}
-
-footer {
-    visibility: hidden;
-}
-
+#MainMenu, footer {visibility: hidden;}
 </style>
 """
 
-st.markdown(
-    CUSTOM_CSS,
-    unsafe_allow_html=True
-)
+st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 
 
-# ============================================================
-# HEADER
-# ============================================================
+# --------------------------------------------------
+# HERO HEADER
+# --------------------------------------------------
 
-st.markdown(
+render_html(
     """
     <div class="hero">
-
-        <div class="hero-badge">
-            AI-Powered Computer Vision
-        </div>
-
-        <div class="hero-title">
-            🔬 TextureAI
-        </div>
-
+        <div class="hero-eyebrow">Surface &amp; Texture Analysis · v2.0</div>
+        <div class="hero-title">🧩 Texture Classification</div>
         <div class="hero-subtitle">
-            Analyze surface textures using a fine-tuned
-            EfficientNetB3 deep learning model.
-            Upload an image and receive an instant
-            47-class classification with confidence scores.
+            Upload a surface sample and get a live confidence readout across 47 texture classes,
+            powered by EfficientNetB3.
         </div>
-
     </div>
-    """,
-    unsafe_allow_html=True
+    """
 )
 
 
-# ============================================================
+# --------------------------------------------------
 # LOAD MODEL
-# ============================================================
+# --------------------------------------------------
 
 @st.cache_resource
 def get_model():
-
     return load_model()
 
 
 try:
-
-    with st.spinner("Initializing EfficientNetB3..."):
-
+    with st.spinner("Loading model…"):
         model = get_model()
 
 except Exception as e:
-
-    st.error(
-        "Unable to load the trained model."
-    )
-
+    st.error("Failed to load the trained model.")
     st.exception(e)
-
     st.stop()
 
 
-# ============================================================
-# SIDEBAR
-# ============================================================
+# --------------------------------------------------
+# SIDEBAR — SPEC SHEET
+# --------------------------------------------------
 
 with st.sidebar:
 
-    st.markdown(
-        '<div class="sidebar-title">⚙️ Model Details</div>',
-        unsafe_allow_html=True
+    render_html(
+        """
+        <div class="sidebar-eyebrow">Model Spec Sheet</div>
+        <div class="sidebar-title">Configuration</div>
+        """
     )
 
     specs = [
         ("Architecture", "EfficientNetB3"),
-        ("Input Size", "300 × 300"),
+        ("Input size", "300 × 300"),
         ("Classes", "47"),
-        ("Framework", "TensorFlow"),
+        ("Framework", "TensorFlow / Keras"),
         ("Preprocessing", "OpenCV"),
     ]
+    rows_html = "".join(
+        f'<div class="spec-row"><span class="k">{k}</span><span class="v">{v}</span></div>'
+        for k, v in specs
+    )
+    render_html(f'<div>{rows_html}</div>')
 
-    for label, value in specs:
-
-        st.markdown(
-            f"""
-            <div class="sidebar-item">
-
-                <div class="sidebar-label">
-                    {label}
-                </div>
-
-                <div class="sidebar-value">
-                    {value}
-                </div>
-
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
-
-    st.divider()
-
-    st.markdown(
-        """
-        <div style="
-            color:#9ca3af;
-            font-size:0.75rem;
-            line-height:1.5;
-        ">
-        The trained model analyzes uploaded images
-        and returns the most probable texture class
-        together with the top alternative predictions.
-        </div>
-        """,
-        unsafe_allow_html=True
+    st.markdown("")
+    confidence_threshold = st.slider(
+        "Flag predictions below this confidence",
+        min_value=0,
+        max_value=100,
+        value=60,
+        format="%d%%",
+        help="Predictions under this threshold are marked as low-confidence.",
     )
 
-
-# ============================================================
-# MODEL STATISTICS
-# ============================================================
-
-st.markdown(
-    '<div class="section-title">Model Overview</div>',
-    unsafe_allow_html=True
-)
-
-stat1, stat2, stat3, stat4 = st.columns(4)
-
-stats = [
-    ("Architecture", "EfficientNetB3"),
-    ("Input", "300 × 300"),
-    ("Classes", "47"),
-    ("Inference", "Real-time"),
-]
-
-for column, (label, value) in zip(
-    [stat1, stat2, stat3, stat4],
-    stats
-):
-
-    with column:
-
-        st.markdown(
-            f"""
-            <div class="stat-card">
-
-                <div class="stat-label">
-                    {label}
-                </div>
-
-                <div class="stat-value">
-                    {value}
-                </div>
-
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
+    st.markdown("")
+    render_html('<div class="footnote">Model loaded and cached for this session.</div>')
 
 
-# ============================================================
-# UPLOAD
-# ============================================================
+# --------------------------------------------------
+# IMAGE UPLOAD
+# --------------------------------------------------
 
-st.markdown(
-    '<div class="section-title">Upload Texture Image</div>',
-    unsafe_allow_html=True
-)
-
-st.markdown(
-    '<div class="section-caption">'
-    'Supported formats: JPG, JPEG, PNG, BMP, WEBP'
-    '</div>',
-    unsafe_allow_html=True
-)
+render_html('<div class="section-label">01 · Sample Upload</div>')
 
 uploaded_file = st.file_uploader(
-    "Upload image",
-    type=[
-        "jpg",
-        "jpeg",
-        "png",
-        "bmp",
-        "webp"
-    ],
-    label_visibility="collapsed"
+    "Choose an image",
+    type=["jpg", "jpeg", "png", "bmp", "webp"],
+    label_visibility="collapsed",
 )
-
-
-# ============================================================
-# EMPTY STATE
-# ============================================================
 
 if uploaded_file is None:
-
-    st.markdown(
+    render_html(
         """
-        <div class="card"
-             style="
-                 text-align:center;
-                 padding:3rem;
-                 margin-top:1rem;
-             ">
-
-            <div style="font-size:3rem;">
-                🖼️
-            </div>
-
-            <h3>
-                Upload an image to begin
-            </h3>
-
-            <p style="color:#6b7280;">
-                Our EfficientNetB3 model will analyze
-                the image and identify its texture class.
-            </p>
-
+        <div class="footnote">
+            Accepted formats: JPG, JPEG, PNG, BMP, WEBP. The image is analyzed locally within this session only.
         </div>
-        """,
-        unsafe_allow_html=True
+        """
     )
 
-    st.stop()
 
-
-# ============================================================
-# IMAGE
-# ============================================================
-
-image = Image.open(
-    uploaded_file
-)
-
-# Make sure the image is RGB
-image = image.convert("RGB")
-
-
-# ============================================================
+# --------------------------------------------------
 # PREDICTION
-# ============================================================
+# --------------------------------------------------
 
-with st.spinner(
-    "Analyzing texture..."
-):
+if uploaded_file is not None:
 
-    try:
+    image = Image.open(uploaded_file)
 
-        image_bytes = (
-            uploaded_file.getvalue()
-        )
+    st.markdown("")
+    render_html('<div class="section-label">02 · Specimen &amp; Reading</div>')
 
-        processed_image = (
-            preprocess_image(
-                image_bytes
+    col1, col2 = st.columns([1, 1], gap="large")
+
+    # ---------------- DISPLAY IMAGE ----------------
+
+    with col1:
+        st.image(image, use_container_width=True)
+        render_html(f'<div class="footnote">FILE · {uploaded_file.name}</div>')
+
+    # ---------------- RUN PREDICTION ----------------
+
+    with st.spinner("Analyzing texture…"):
+
+        try:
+            image_bytes = uploaded_file.getvalue()
+            processed_image = preprocess_image(image_bytes)
+            result = predict(model, processed_image)
+
+        except Exception as e:
+            st.error("Prediction failed.")
+            st.exception(e)
+            st.stop()
+
+    confidence_pct = result["confidence"] * 100
+
+    if confidence_pct >= 90:
+        tier, tier_label = "high", "High confidence"
+    elif confidence_pct >= confidence_threshold:
+        tier, tier_label = "medium", "Moderate confidence"
+    else:
+        tier, tier_label = "low", "Low confidence — verify manually"
+
+    # ---------------- MAIN RESULT (gauge) ----------------
+
+    with col2:
+        gauge_colors = {"high": "#3FA796", "medium": "#E3A857", "low": "#E4634F"}
+
+        fig = go.Figure(
+            go.Indicator(
+                mode="gauge+number",
+                value=confidence_pct,
+                number={"suffix": "%", "font": {"size": 40, "family": "IBM Plex Mono"}},
+                gauge={
+                    "axis": {"range": [0, 100], "tickcolor": "#6B6280"},
+                    "bar": {"color": gauge_colors[tier]},
+                    "bgcolor": "white",
+                    "borderwidth": 0,
+                    "steps": [
+                        {"range": [0, confidence_threshold], "color": "#F6E9E7"},
+                        {"range": [confidence_threshold, 90], "color": "#FBF1E3"},
+                        {"range": [90, 100], "color": "#E9F5F2"},
+                    ],
+                },
             )
         )
-
-        result = predict(
-            model,
-            processed_image
+        fig.update_layout(
+            height=220,
+            margin=dict(l=20, r=20, t=10, b=10),
+            paper_bgcolor="rgba(0,0,0,0)",
+            font={"family": "Inter"},
         )
 
-    except Exception as e:
+        render_html(
+            f"""
+            <div class="card">
+                <div class="result-label">Predicted Class</div>
+                <div class="result-class">{result["class"]}</div>
+                <div class="badge {tier}"><span class="badge-dot"></span>{tier_label}</div>
+            </div>
+            """
+        )
+        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
-        st.error(
-            "Prediction failed."
+    if tier == "high" and confidence_pct >= 98:
+        st.balloons()
+    elif tier == "low":
+        st.warning(
+            f"Confidence is below your {confidence_threshold}% threshold — consider reviewing "
+            "the sample or checking the top-5 alternatives below."
         )
 
-        st.exception(e)
-
-        st.stop()
-
-
-# ============================================================
-# RESULT HEADER
-# ============================================================
-
-st.markdown(
-    '<div class="section-title">Analysis Result</div>',
-    unsafe_allow_html=True
-)
-
-
-# ============================================================
-# IMAGE + MAIN RESULT
-# ============================================================
-
-image_col, result_col = st.columns(
-    [1.05, 1],
-    gap="large"
-)
-
-
-# ------------------------------------------------------------
-# IMAGE
-# ------------------------------------------------------------
-
-with image_col:
-
-    st.markdown(
-        '<div class="card">',
-        unsafe_allow_html=True
-    )
-
-    st.image(
-        image,
-        use_container_width=True
-    )
-
-    st.markdown(
-        f"""
-        <div style="
-            color:#6b7280;
-            font-size:0.75rem;
-            margin-top:0.6rem;
-        ">
-            📄 {uploaded_file.name}
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-
-    st.markdown(
-        '</div>',
-        unsafe_allow_html=True
-    )
-
-
-# ------------------------------------------------------------
-# RESULT
-# ------------------------------------------------------------
-
-with result_col:
-
-    confidence = (
-        result["confidence"] * 100
-    )
-
-    if confidence >= 80:
-
-        status = "High confidence"
-        status_color = "#059669"
-
-    elif confidence >= 50:
-
-        status = "Moderate confidence"
-        status_color = "#d97706"
-
-    else:
-
-        status = "Low confidence"
-        status_color = "#dc2626"
-
-    st.markdown(
-        f"""
-        <div class="prediction-card">
-
-            <div class="prediction-label">
-                Predicted Texture
-            </div>
-
-            <div class="prediction-class">
-                {result["class"]}
-            </div>
-
-            <div class="confidence-number">
-                {confidence:.2f}%
-            </div>
-
-            <div class="confidence-label">
-                Confidence
-            </div>
-
-            <div class="confidence-track">
-
-                <div class="confidence-fill"
-                     style="width:{confidence:.2f}%;">
-                </div>
-
-            </div>
-
-            <div style="
-                margin-top:0.9rem;
-                color:{status_color};
-                font-weight:700;
-                font-size:0.85rem;
-            ">
-                ● {status}
-            </div>
-
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-
-
-# ============================================================
-# TOP 5
-# ============================================================
-
-st.markdown(
-    '<div class="section-title">Top 5 Predictions</div>',
-    unsafe_allow_html=True
-)
-
-st.markdown(
-    '<div class="section-caption">'
-    'Probability distribution across the most likely classes'
-    '</div>',
-    unsafe_allow_html=True
-)
-
-
-for rank, item in enumerate(
-    result["top_predictions"],
-    start=1
-):
-
-    class_name = item["class"]
-
-    probability = (
-        item["confidence"] * 100
-    )
-
-    st.markdown(
-        f"""
-        <div class="prediction-row">
-
-            <div class="prediction-rank">
-                {rank}
-            </div>
-
-            <div class="prediction-name">
-                {class_name}
-            </div>
-
-            <div class="prediction-bar">
-
-                <div class="prediction-fill"
-                     style="width:{probability:.2f}%;">
-                </div>
-
-            </div>
-
-            <div class="prediction-percent">
-                {probability:.2f}%
-            </div>
-
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-
-
-# ============================================================
-# INTERACTIVE CHART
-# ============================================================
-
-st.markdown(
-    '<div class="section-title">Prediction Distribution</div>',
-    unsafe_allow_html=True
-)
-
-chart_data = pd.DataFrame(
-    {
-        "Texture": [
-            item["class"]
-            for item in result["top_predictions"]
-        ],
-
-        "Confidence": [
-            item["confidence"] * 100
-            for item in result["top_predictions"]
-        ],
-    }
-)
-
-st.bar_chart(
-    chart_data.set_index("Texture"),
-    y="Confidence",
-    height=280
-)
-
-
-# ============================================================
-# IMAGE INFORMATION
-# ============================================================
-
-with st.expander(
-    "🔎 Image Information"
-):
-
-    info1, info2, info3 = st.columns(3)
-
-    info1.metric(
-        "Width",
-        f"{image.width}px"
-    )
-
-    info2.metric(
-        "Height",
-        f"{image.height}px"
-    )
-
-    info3.metric(
-        "Format",
-        image.format or "Image"
-    )
-
-
-# ============================================================
-# FOOTER
-# ============================================================
-
-st.divider()
-
-st.markdown(
-    """
-    <div style="
-        text-align:center;
-        color:#6b7280;
-        font-size:0.75rem;
-        padding:0.8rem;
-    ">
-        TextureAI · EfficientNetB3 · 47-Class Texture Recognition
-    </div>
-    """,
-    unsafe_allow_html=True
-)
+    # ---------------- TOP 5 (tabs: ranked view + chart + raw) ----------------
+
+    st.markdown("")
+    render_html('<div class="section-label">03 · Ranked Readout — Top 5</div>')
+
+    tab_ranked, tab_chart, tab_raw = st.tabs(["Ranked list", "Chart", "Raw data"])
+
+    with tab_ranked:
+        rows = []
+        for i, item in enumerate(result["top_predictions"], start=1):
+            class_name = item["class"]
+            confidence = item["confidence"] * 100
+            top_class = "rank-row top" if i == 1 else "rank-row"
+
+            rows.append(
+                f'<div class="{top_class}">'
+                f'<span class="rank-badge">{i}</span>'
+                f'<span class="rank-name">{class_name}</span>'
+                f'<div class="rank-track">'
+                f'<div class="rank-fill" style="width:{confidence:.2f}%;"></div>'
+                f'</div>'
+                f'<span class="rank-pct">{confidence:.2f}%</span>'
+                f'</div>'
+            )
+
+        render_html(f'<div class="card">{"".join(rows)}</div>')
+
+    with tab_chart:
+        names = [item["class"] for item in result["top_predictions"]][::-1]
+        values = [item["confidence"] * 100 for item in result["top_predictions"]][::-1]
+        bar_colors = ["#5B4B9E"] * (len(values) - 1) + ["#E3A857"]
+
+        bar_fig = go.Figure(
+            go.Bar(
+                x=values,
+                y=names,
+                orientation="h",
+                marker_color=bar_colors,
+                text=[f"{v:.2f}%" for v in values],
+                textposition="outside",
+                hovertemplate="%{y}: %{x:.2f}%<extra></extra>",
+            )
+        )
+        bar_fig.update_layout(
+            height=280,
+            margin=dict(l=10, r=10, t=10, b=10),
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+            xaxis=dict(range=[0, max(values) * 1.2], showgrid=False, ticksuffix="%"),
+            font={"family": "Inter", "color": "#221933"},
+        )
+        st.plotly_chart(bar_fig, use_container_width=True, config={"displayModeBar": False})
+
+    with tab_raw:
+        st.json(result)
