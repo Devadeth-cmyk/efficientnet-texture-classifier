@@ -1,17 +1,15 @@
-import os
 import numpy as np
 import tensorflow as tf
+from huggingface_hub import hf_hub_download
 
 
 # --------------------------------------------------
-# MODEL PATH
+# HUGGING FACE MODEL
 # --------------------------------------------------
 
-MODEL_PATH = os.path.join(
-    os.path.dirname(os.path.dirname(__file__)),
-    "model",
-    "best_efficientnetb3_finetuned.keras"
-)
+HF_REPO_ID = "DB03/best_efficientnetb3_finetuned.keras"
+
+MODEL_FILENAME = "best_efficientnetb3_finetuned.keras"
 
 
 # --------------------------------------------------
@@ -75,13 +73,13 @@ CLASS_NAMES = [
 
 def load_model():
 
-    if not os.path.isfile(MODEL_PATH):
-        raise FileNotFoundError(
-            f"Model not found at: {MODEL_PATH}"
-        )
+    model_path = hf_hub_download(
+        repo_id=HF_REPO_ID,
+        filename=MODEL_FILENAME
+    )
 
     model = tf.keras.models.load_model(
-        MODEL_PATH,
+        model_path,
         compile=False
     )
 
@@ -94,32 +92,29 @@ def load_model():
 
 def predict(model, processed_image):
 
-    # Get predictions from the model
     predictions = model.predict(
         processed_image,
         verbose=0
     )[0]
 
-    # Safety check
     if len(predictions) != len(CLASS_NAMES):
         raise ValueError(
             f"Model returned {len(predictions)} classes, "
             f"but CLASS_NAMES contains {len(CLASS_NAMES)} classes."
         )
 
-    # Find class with highest probability
     predicted_index = int(np.argmax(predictions))
 
     predicted_class = CLASS_NAMES[predicted_index]
 
     confidence = float(predictions[predicted_index])
 
-    # Find top 5 predictions
     top_indices = np.argsort(predictions)[::-1][:5]
 
     top_predictions = []
 
     for index in top_indices:
+
         top_predictions.append({
             "class": CLASS_NAMES[int(index)],
             "confidence": float(predictions[index])
