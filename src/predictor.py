@@ -12,7 +12,7 @@ MODEL_PATH = os.path.join(
         os.path.dirname(__file__)
     ),
     "model",
-    "best_efficientnetb3.keras"
+    "best_efficientnetb3_finetuned.keras"
 )
 
 
