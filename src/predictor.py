@@ -8,9 +8,7 @@ import tensorflow as tf
 # --------------------------------------------------
 
 MODEL_PATH = os.path.join(
-    os.path.dirname(
-        os.path.dirname(__file__)
-    ),
+    os.path.dirname(os.path.dirname(__file__)),
     "model",
     "best_efficientnetb3_finetuned.keras"
 )
@@ -77,14 +75,14 @@ CLASS_NAMES = [
 
 def load_model():
 
-    if not os.path.exists(MODEL_PATH):
-
+    if not os.path.isfile(MODEL_PATH):
         raise FileNotFoundError(
             f"Model not found at: {MODEL_PATH}"
         )
 
     model = tf.keras.models.load_model(
-        MODEL_PATH
+        MODEL_PATH,
+        compile=False
     )
 
     return model
@@ -102,33 +100,29 @@ def predict(model, processed_image):
         verbose=0
     )[0]
 
+    # Safety check
+    if len(predictions) != len(CLASS_NAMES):
+        raise ValueError(
+            f"Model returned {len(predictions)} classes, "
+            f"but CLASS_NAMES contains {len(CLASS_NAMES)} classes."
+        )
+
     # Find class with highest probability
-    predicted_index = int(
-        np.argmax(predictions)
-    )
+    predicted_index = int(np.argmax(predictions))
 
-    predicted_class = CLASS_NAMES[
-        predicted_index
-    ]
+    predicted_class = CLASS_NAMES[predicted_index]
 
-    confidence = float(
-        predictions[predicted_index]
-    )
+    confidence = float(predictions[predicted_index])
 
     # Find top 5 predictions
-    top_indices = np.argsort(
-        predictions
-    )[::-1][:5]
+    top_indices = np.argsort(predictions)[::-1][:5]
 
     top_predictions = []
 
     for index in top_indices:
-
         top_predictions.append({
-            "class": CLASS_NAMES[index],
-            "confidence": float(
-                predictions[index]
-            )
+            "class": CLASS_NAMES[int(index)],
+            "confidence": float(predictions[index])
         })
 
     return {
