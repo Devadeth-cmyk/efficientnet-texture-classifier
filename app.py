@@ -44,12 +44,6 @@ with st.sidebar:
 
     st.divider()
 
-    confidence_threshold = st.slider(
-        "Confidence Threshold",
-        0,
-        100,
-        60
-    )
 
 
 # -------------------------------
