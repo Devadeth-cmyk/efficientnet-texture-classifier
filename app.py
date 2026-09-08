@@ -21,6 +21,7 @@ st.set_page_config(
 # -------------------------------
 
 st.title("🧩 Texture Classification")
+
 st.write(
     "Upload a surface image and the AI model will classify "
     "its texture."
@@ -37,19 +38,12 @@ with st.sidebar:
 
     st.header("Model Information")
 
-    st.write("**Architecture:** EfficientNetB3")
+    st.write("**Architecture:** EfficientNetB0")
     st.write("**Input Size:** 300 × 300")
     st.write("**Classes:** 47")
     st.write("**Framework:** TensorFlow / Keras")
 
     st.divider()
-
-    confidence_threshold = st.slider(
-        "Confidence Threshold",
-        0,
-        100,
-        60
-    )
 
 
 # -------------------------------
@@ -162,7 +156,7 @@ if uploaded_file:
                 "High confidence prediction"
             )
 
-        elif confidence >= confidence_threshold:
+        elif confidence >= 60:
 
             st.info(
                 "Moderate confidence prediction"
@@ -212,5 +206,5 @@ st.divider()
 
 st.caption(
     "Surface & Texture Analysis • "
-    "Powered by EfficientNetB3"
+    "Powered by EfficientNetB0"
 )
