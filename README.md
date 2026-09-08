@@ -2,6 +2,12 @@
 
 A Streamlit-based image classification application using a fine-tuned EfficientNetB3 model to classify images into 47 texture categories.
 
+## Live Demo
+
+Try the application here:
+
+[EfficientNet Texture Classifier](https://efficientnet-texture-classifier-v1.streamlit.app/)
+
 ## Model
 
 - Architecture: EfficientNetB3
