@@ -165,7 +165,7 @@ if uploaded_file:
         else:
 
             st.warning(
-                "Low confidence — manual verification recommended"
+                "Low confidence — Manual verification recommended"
             )
 
 
