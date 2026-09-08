@@ -38,7 +38,7 @@ with st.sidebar:
 
     st.header("Model Information")
 
-    st.write("**Architecture:** EfficientNetB0")
+    st.write("**Architecture:** EfficientNetB3")
     st.write("**Input Size:** 300 × 300")
     st.write("**Classes:** 47")
     st.write("**Framework:** TensorFlow / Keras")
@@ -206,5 +206,5 @@ st.divider()
 
 st.caption(
     "Surface & Texture Analysis • "
-    "Powered by EfficientNetB0"
+    "Powered by EfficientNetB3"
 )
